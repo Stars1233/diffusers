@@ -667,8 +667,11 @@ def load_sub_model(
     use_safetensors: bool,
     dduf_entries: Optional[Dict[str, DDUFEntry]],
     provider_options: Any,
+    quantization_config: Optional[Any] = None,
 ):
     """Helper method to load the module `name` from `library_name` and `class_name`"""
+
+    from ..quantizers import PipelineQuantizationConfig
 
     # retrieve class candidates
 
@@ -760,6 +763,12 @@ def load_sub_model(
             loading_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
         else:
             loading_kwargs["low_cpu_mem_usage"] = False
+
+    if quantization_config is not None and isinstance(quantization_config, PipelineQuantizationConfig):
+        exclude_modules = quantization_config.exclude_modules or []
+        if name not in exclude_modules:
+            model_quant_config = _resolve_quant_config(quantization_config, is_diffusers=is_diffusers_model)
+            loading_kwargs["quantization_config"] = model_quant_config
 
     # check if the module is in a subdirectory
     if dduf_entries:
@@ -1070,3 +1079,22 @@ def _maybe_raise_error_for_incorrect_transformers(config_dict):
                 break
     if has_transformers_component and not is_transformers_version(">", "4.47.1"):
         raise ValueError("Please upgrade your `transformers` installation to the latest version to use DDUF.")
+
+
+def _resolve_quant_config(quant_config, is_diffusers=True):
+    if is_diffusers:
+        from ..quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
+    else:
+        from transformers.quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
+
+    quant_backend = quant_config.quant_backend
+    if quant_backend not in AUTO_QUANTIZATION_CONFIG_MAPPING:
+        raise ValueError(
+            f"Provided {quant_backend=} was not found in the support quantizers. Available ones are: {AUTO_QUANTIZATION_CONFIG_MAPPING.keys()}."
+        )
+
+    quant_config_cls = AUTO_QUANTIZATION_CONFIG_MAPPING[quant_backend]
+
+    quant_kwargs = quant_config.quant_kwargs
+    quant_config = quant_config_cls(**quant_kwargs)
+    return quant_config

@@ -14,3 +14,10 @@
 
 from .auto import DiffusersAutoQuantizer
 from .base import DiffusersQuantizer
+
+
+class PipelineQuantizationConfig:
+    def __init__(self, quant_backend, quant_kwargs, exclude_modules):
+        self.quant_backend = quant_backend
+        self.quant_kwargs = quant_kwargs
+        self.exclude_modules = exclude_modules
