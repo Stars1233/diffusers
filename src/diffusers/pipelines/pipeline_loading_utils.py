@@ -764,7 +764,11 @@ def load_sub_model(
         else:
             loading_kwargs["low_cpu_mem_usage"] = False
 
-    if quantization_config is not None and isinstance(quantization_config, PipelineQuantizationConfig):
+    if (
+        quantization_config is not None
+        and isinstance(quantization_config, PipelineQuantizationConfig)
+        and issubclass(class_obj, torch.nn.Module)
+    ):
         exclude_modules = quantization_config.exclude_modules or []
         if name not in exclude_modules:
             model_quant_config = _resolve_quant_config(quantization_config, is_diffusers=is_diffusers_model)
