@@ -769,9 +769,10 @@ def load_sub_model(
         and isinstance(quantization_config, PipelineQuantizationConfig)
         and issubclass(class_obj, torch.nn.Module)
     ):
-        exclude_modules = quantization_config.exclude_modules or []
-        if name not in exclude_modules:
-            model_quant_config = _resolve_quant_config(quantization_config, is_diffusers=is_diffusers_model)
+        model_quant_config = quantization_config._resolve_quant_config(
+            is_diffusers=is_diffusers_model, module_name=name
+        )
+        if model_quant_config is not None:
             loading_kwargs["quantization_config"] = model_quant_config
 
     # check if the module is in a subdirectory
@@ -1085,20 +1086,33 @@ def _maybe_raise_error_for_incorrect_transformers(config_dict):
         raise ValueError("Please upgrade your `transformers` installation to the latest version to use DDUF.")
 
 
-def _resolve_quant_config(quant_config, is_diffusers=True):
+def _resolve_quant_config(quant_config, is_diffusers=True, module_name=None):
     if is_diffusers:
         from ..quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
     else:
         from transformers.quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
 
-    quant_backend = quant_config.quant_backend
-    if quant_backend not in AUTO_QUANTIZATION_CONFIG_MAPPING:
-        raise ValueError(
-            f"Provided {quant_backend=} was not found in the support quantizers. Available ones are: {AUTO_QUANTIZATION_CONFIG_MAPPING.keys()}."
-        )
+    # Granular case.
+    if getattr(quant_config, "is_granular", False):
+        config = quant_config.mapping.get(module_name)
+        quant_backend = config.get("quant_backend")
+        if quant_backend not in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(
+                f"Module '{module_name}': Provided quant_backend={quant_backend} was not found. "
+                f"Available ones are: {list(AUTO_QUANTIZATION_CONFIG_MAPPING.keys())}."
+            )
+        quant_config_cls = AUTO_QUANTIZATION_CONFIG_MAPPING[quant_backend]
+        quant_kwargs = config.get("quant_kwargs")
 
-    quant_config_cls = AUTO_QUANTIZATION_CONFIG_MAPPING[quant_backend]
-
-    quant_kwargs = quant_config.quant_kwargs
-    quant_config = quant_config_cls(**quant_kwargs)
-    return quant_config
+        return quant_config_cls(**quant_kwargs)
+    else:
+        # Global config case.
+        quant_backend = quant_config.quant_backend
+        if quant_backend not in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(
+                f"Provided quant_backend={quant_backend} was not found. "
+                f"Available ones are: {list(AUTO_QUANTIZATION_CONFIG_MAPPING.keys())}."
+            )
+        quant_config_cls = AUTO_QUANTIZATION_CONFIG_MAPPING[quant_backend]
+        quant_kwargs = quant_config.quant_kwargs
+        return quant_config_cls(**quant_kwargs)

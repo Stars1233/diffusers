@@ -875,6 +875,9 @@ class DiffusionPipeline(ConfigMixin, PushToHubMixin):
         }
         init_kwargs = {**init_kwargs, **passed_pipe_kwargs}
 
+        # TODO: add checking for quantization_config `mapping` i.e., if the modules specified there actually exist.
+        #########################
+
         # remove `null` components
         def load_module(name, value):
             if value[0] is None:
